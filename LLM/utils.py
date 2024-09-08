@@ -1,4 +1,8 @@
 import re
+from base import LLM
+import json
+from typing import Literal, Tuple, Dict
+from prompts.Persona import SET_PERSONA
 
 def extract_persona_data(xml_string):
     personas = []
@@ -26,3 +30,62 @@ def extract_persona_data(xml_string):
         })
     
     return personas
+
+def generate_debate_personas(
+    debate_topic: str,
+    name1: str,
+    name2: str,
+    provider: Literal["openai", "claude"] = "openai"
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """
+    Generate debate personas based on the given topic and names.
+
+    Args:
+        debate_topic (str): The topic of the debate.
+        name1 (str): Name of the first debater.
+        name2 (str): Name of the second debater.
+        provider (Literal["openai", "claude"]): The LLM provider to use.
+
+    Returns:
+        Tuple[Dict[str, str], Dict[str, str]]: Two dictionaries containing
+        the name, user prompt, and system prompt for each persona.
+    """
+
+    prompt = SET_PERSONA.format(
+        debate_topic=debate_topic,
+        name1=name1,
+        name2=name2
+    )
+
+    llm = LLM(provider=provider, stream=False)
+    response = llm(user_prompt=prompt)
+    
+    print("Raw LLM response:")
+    print(response)
+    
+    personas = extract_persona_data(response)
+
+    print(f"Extracted personas: {len(personas)}")
+    for i, persona in enumerate(personas):
+        print(f"Persona {i+1}:")
+        print(json.dumps(persona, indent=2))
+
+    if len(personas) != 2:
+        raise ValueError(f"Expected 2 personas, but got {len(personas)}")
+
+    if len(personas) < 2:
+        raise ValueError("Not enough personas generated")
+
+    persona1 = {
+        "name": personas[0]["name"],
+        "user_prompt": personas[0]["user_prompt"],
+        "system_prompt": personas[0]["system_prompt"]
+    }
+
+    persona2 = {
+        "name": personas[1]["name"],
+        "user_prompt": personas[1]["user_prompt"],
+        "system_prompt": personas[1]["system_prompt"]
+    }
+
+    return persona1, persona2
