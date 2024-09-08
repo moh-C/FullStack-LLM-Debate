@@ -9,7 +9,6 @@ For each persona, create:
    * Introduces the persona
    * Sets the debate topic
    * Encourages funny and opposing behavior
-   * Make sure you pay attention to the conversation history to have a coherent debate with the opposing person!
 
 A system prompt (5-7 bullet points) that:
 - Defines the persona's unique traits and speech patterns
@@ -19,14 +18,12 @@ A system prompt (5-7 bullet points) that:
 - Ensure both personas are funny, opposing each other, and thrilling to watch/read.
 
 Important: Make you entire output is in xml format, nothing extra! so no explanations!
-Include a <conversation_history></conversation_history> tag for each persona. If there's no history yet, leave it empty. In the user prompt, always read the Conversation History!
 
 Example output format:
 <personas>
 <persona>
 <name></name>
 <userprompt>
-<conversation_history></conversation_history>
 </userprompt>
 <systemprompt></systemprompt>
 </persona>
@@ -34,7 +31,6 @@ Example output format:
 <persona>
 <name></name>
 <userprompt>
-<conversation_history></conversation_history>
 </userprompt>
 <systemprompt></systemprompt>
 </persona>
