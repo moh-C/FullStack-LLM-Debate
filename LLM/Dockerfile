@@ -17,6 +17,5 @@ RUN apt-get update && apt-get install -y bash
 # Make port 80 available to the world outside this container
 EXPOSE 80
 
-# Set the default command to bash
-# CMD ["/bin/bash"]
-CMD ["python", "openaigpt.py"]
+# Set the default command to run bash
+CMD ["/bin/bash"]

@@ -5,6 +5,8 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
+# Load environment variables from .env file
+load_dotenv()
 
 def get_completion(client, stream=False):
     """
@@ -22,9 +24,7 @@ def get_completion(client, stream=False):
         messages=[
             {
                 "role": "user",
-                "content": (
-                    "Tell a 10 line story explaining what 7/11 is! "
-                ),
+                "content": "Tell a 10 line story explaining what 7/11 is!",
             }
         ],
         stream=stream,
@@ -53,11 +53,13 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load environment variables from .env file
-    load_dotenv()
+    # Retrieve the API key from the environment
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not found in environment variables")
 
-    # Initialize the client
-    client = OpenAI()
+    # Initialize the client with the API key
+    client = OpenAI(api_key=api_key)
 
     # Get and print the completion
     response = get_completion(client, stream=args.stream)
