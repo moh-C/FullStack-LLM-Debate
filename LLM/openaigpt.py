@@ -2,20 +2,31 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load environment variables from .env file
-load_dotenv()
 
-# Initialize the client
-client = OpenAI()
+def main():
+    # Load environment variables from .env file
+    load_dotenv()
 
-# Create the streaming completion
-stream = client.chat.completions.create(
-    model="gpt-4",  # Make sure this is a valid model name
-    messages=[{"role": "user", "content": "Say this is a test"}],
-    stream=True,
-)
+    # Initialize the client
+    client = OpenAI()
 
-# Process the stream
-for chunk in stream:
-    if chunk.choices[0].delta.content is not None:
-        print(chunk.choices[0].delta.content, end="")
+    # Create the streaming completion
+    stream = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "user",
+                "content": "Tell a 10 line story explaning what 7/11 is! I want it to have at least 1000 words as the output",
+            }
+        ],
+        stream=True,
+    )
+
+    # Process the stream
+    for chunk in stream:
+        if chunk.choices[0].delta.content is not None:
+            print(chunk.choices[0].delta.content, end="")
+
+
+if __name__ == "__main__":
+    main()
