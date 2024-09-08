@@ -16,6 +16,7 @@ A system prompt (5-7 bullet points) that:
 - Encourages opposition to the other persona
 - Provides guidelines for entertaining responses
 - Ensure both personas are funny, opposing each other, and thrilling to watch/read.
+- Should include that the output for that conversation should NOT be more than {answer_length} words!
 
 Important: Make you entire output is in xml format, nothing extra! so no explanations!
 
