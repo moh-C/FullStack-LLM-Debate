@@ -1,7 +1,12 @@
-from base import LLM
-import os
-print(os.getcwd())
+import os, sys
 
+# Get the parent directory
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+# Add the parent directory to the system path
+sys.path.insert(0, parent_dir)
+
+from base import LLM
 from prompts.Persona import SET_PERSONA
 from utils import extract_persona_data
 
@@ -17,7 +22,7 @@ prompt = SET_PERSONA.format(
 
 # For OpenAI
 llm1 = LLM(provider="openai", stream=False)
-response1 = llm1(prompt=prompt)
+response1 = llm1(user_prompt=prompt)
 personas = extract_persona_data(response1)
 
 for persona in personas:
@@ -30,7 +35,7 @@ print("/n/n/n")
 
 # For Claude
 llm2 = LLM(provider="claude", stream=False)
-response2 = llm2(prompt=prompt)
+response2 = llm2(user_prompt=prompt)
 personas = extract_persona_data(response2)
 
 for persona in personas:

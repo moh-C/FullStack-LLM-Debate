@@ -13,7 +13,8 @@ class LLM:
         stream: bool = False,
         model: Optional[str] = None,
         max_tokens: int = 1000,
-        temperature: float = 0.7
+        temperature: float = 0.7,
+        system_prompt: str = "You are a helpful AI assistant."
     ):
         """
         Initialize the LLM object.
@@ -24,12 +25,14 @@ class LLM:
             model: The specific model to use (optional).
             max_tokens: The maximum number of tokens to generate.
             temperature: Controls randomness in the output (0.0 to 1.0).
+            system_prompt: The system prompt to use for all conversations.
         """
         load_dotenv()
         self.provider = provider
         self.stream = stream
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self.system_prompt = system_prompt
 
         if provider == "openai":
             api_key = os.getenv("OPENAI_API_KEY")
@@ -46,27 +49,27 @@ class LLM:
         else:
             raise ValueError("Invalid provider. Choose 'openai' or 'claude'.")
 
-    def __call__(self, prompt: Union[str, list[dict]]) -> str:
+    def __call__(self, user_prompt: str) -> str:
         """
-        Call the LLM with a prompt.
+        Call the LLM with a user prompt.
 
         Args:
-            prompt: The input prompt for the LLM. Can be a string or a list of message dicts.
+            user_prompt: The input prompt from the user.
 
         Returns:
             The generated response as a string.
         """
         if self.provider == "openai":
-            return self._call_openai(prompt)
+            return self._call_openai(user_prompt)
         else:
-            return self._call_claude(prompt)
+            return self._call_claude(user_prompt)
 
-    def _call_openai(self, prompt: Union[str, list[dict]]) -> str:
+    def _call_openai(self, user_prompt: str) -> str:
         """Call the OpenAI API."""
-        if isinstance(prompt, str):
-            messages = [{"role": "user", "content": prompt}]
-        else:
-            messages = prompt
+        messages = [
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
 
         try:
             response = self.client.chat.completions.create(
@@ -85,19 +88,17 @@ class LLM:
             print(f"Error calling OpenAI API: {str(e)}")
             return ""
 
-    def _call_claude(self, prompt: Union[str, list[dict]]) -> str:
+    def _call_claude(self, user_prompt: str) -> str:
         """Call the Anthropic Claude API."""
-        if isinstance(prompt, str):
-            messages = [{"role": "user", "content": prompt}]
-        else:
-            messages = prompt
-
         try:
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
-                messages=messages,
+                system=self.system_prompt,
+                messages=[
+                    {"role": "user", "content": user_prompt}
+                ],
                 stream=self.stream,
             )
 
@@ -149,3 +150,7 @@ class LLM:
             self.temperature = temperature
         else:
             raise ValueError("Temperature must be between 0 and 1.")
+
+    def set_system_prompt(self, system_prompt: str):
+        """Set the system prompt."""
+        self.system_prompt = system_prompt
