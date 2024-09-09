@@ -9,48 +9,56 @@ function App() {
         setIsLoading(true);
         setOutput('');
 
-        const eventSource = new EventSource('http://localhost:8000/stream');
+        const response = await fetch('http://localhost:8000/generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: input }),
+        });
 
-        eventSource.onmessage = function (event) {
-            if (event.data === '[DONE]') {
-                eventSource.close();
-                setIsLoading(false);
-            } else {
-                setOutput(prevOutput => prevOutput + event.data);
-            }
-        };
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-        eventSource.onerror = function (error) {
-            console.error('EventSource failed:', error);
-            eventSource.close();
-            setIsLoading(false);
-        };
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            lines.forEach((line) => {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6);
+                    if (data === '[DONE]') {
+                        setIsLoading(false);
+                    } else {
+                        setOutput((prevOutput) => prevOutput + data);
+                    }
+                }
+            });
+        }
+
+        setIsLoading(false);
     };
 
     return (
-        <div className="container mx-auto p-4">
-            <h1 className="text-2xl font-bold mb-4">LLM Interface</h1>
-            <div className="mb-4">
+        <div className="container">
+            <h1>AI Assistant</h1>
+            <div>
+                <label htmlFor="prompt">Your Prompt</label>
                 <textarea
-                    className="w-full p-2 border rounded"
+                    id="prompt"
                     rows="4"
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="Enter your prompt here..."
                 />
             </div>
-            <button
-                className="bg-blue-500 text-white px-4 py-2 rounded"
-                onClick={handleGenerate}
-                disabled={isLoading}
-            >
+            <button onClick={handleGenerate} disabled={isLoading}>
                 {isLoading ? 'Generating...' : 'Generate'}
             </button>
-            <div className="mt-4">
-                <h2 className="text-xl font-semibold mb-2">Output:</h2>
-                <div className="border p-2 rounded min-h-[100px] whitespace-pre-wrap">
-                    {output || 'Output will appear here...'}
-                </div>
+            <div>
+                <h2>Output:</h2>
+                <pre>{output || 'Your response will appear here...'}</pre>
             </div>
         </div>
     );
