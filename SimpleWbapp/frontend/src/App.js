@@ -1,54 +1,50 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 function App() {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [socket, setSocket] = useState(null);
 
-    const handleGenerate = useCallback(async () => {
-        setIsLoading(true);
-        setOutput('');
+    useEffect(() => {
+        const ws = new WebSocket('ws://localhost:8000/ws');
+        setSocket(ws);
 
-        try {
-            const response = await fetch('http://localhost:8000/generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ prompt: input }),
-            });
+        ws.onopen = () => {
+            console.log('WebSocket Connected');
+        };
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-
-            let buffer = '';
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = line.slice(6);
-                        if (data === '[DONE]') {
-                            setIsLoading(false);
-                        } else {
-                            setOutput(prevOutput => prevOutput + data);
-                        }
-                    }
-                }
+        ws.onmessage = (event) => {
+            if (event.data === '[DONE]') {
+                setIsLoading(false);
+            } else {
+                setOutput(prevOutput => prevOutput + event.data);
             }
-        } catch (error) {
-            console.error('Error:', error);
-            setOutput('An error occurred while generating the response.');
-        } finally {
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket Error:', error);
             setIsLoading(false);
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket Disconnected');
+        };
+
+        return () => {
+            ws.close();
+        };
+    }, []);
+
+    const handleGenerate = useCallback(() => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            setIsLoading(true);
+            setOutput('');
+            socket.send(JSON.stringify({ prompt: input }));
+        } else {
+            console.error('WebSocket is not connected');
         }
-    }, [input]);
+    }, [socket, input]);
 
     return (
         <div className="container">
@@ -63,7 +59,7 @@ function App() {
                     placeholder="Enter your prompt here..."
                 />
             </div>
-            <button onClick={handleGenerate} disabled={isLoading}>
+            <button onClick={handleGenerate} disabled={isLoading || !socket || socket.readyState !== WebSocket.OPEN}>
                 {isLoading ? 'Generating...' : 'Generate'}
             </button>
             <div>

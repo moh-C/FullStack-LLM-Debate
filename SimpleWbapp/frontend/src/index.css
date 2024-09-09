@@ -70,3 +70,48 @@ pre {
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+
+.markdown-output {
+  background-color: #f8f8f8;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 16px;
+  margin-top: 20px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.markdown-output h1,
+.markdown-output h2,
+.markdown-output h3,
+.markdown-output h4,
+.markdown-output h5,
+.markdown-output h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.markdown-output p {
+  margin-bottom: 16px;
+}
+
+.markdown-output code {
+  background-color: #f0f0f0;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+
+.markdown-output pre {
+  background-color: #f0f0f0;
+  border-radius: 3px;
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.markdown-output ul,
+.markdown-output ol {
+  padding-left: 2em;
+  margin-bottom: 16px;
+}

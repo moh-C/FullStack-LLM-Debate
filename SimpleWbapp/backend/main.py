@@ -1,11 +1,9 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 import logging
-import asyncio
+import json
 from openai import AsyncOpenAI
 
 load_dotenv()
@@ -25,27 +23,29 @@ app.add_middleware(
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-class PromptRequest(BaseModel):
-    prompt: str
-
-async def generate_stream(prompt: str):
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
     try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            stream=True
-        )
-        async for chunk in response:
-            if chunk.choices[0].delta.content is not None:
-                yield f"data: {chunk.choices[0].delta.content}\n\n"
-        yield "data: [DONE]\n\n"
+        while True:
+            data = await websocket.receive_text()
+            prompt = json.loads(data)["prompt"]
+            
+            try:
+                response = await client.chat.completions.create(
+                    model="gpt-4",
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True
+                )
+                async for chunk in response:
+                    if chunk.choices[0].delta.content is not None:
+                        await websocket.send_text(chunk.choices[0].delta.content)
+                await websocket.send_text("[DONE]")
+            except Exception as e:
+                logger.error(f"Error in generate_stream: {str(e)}")
+                await websocket.send_text(f"Error: {str(e)}")
     except Exception as e:
-        logger.error(f"Error in generate_stream: {str(e)}")
-        yield f"data: Error: {str(e)}\n\n"
-
-@app.post("/generate")
-async def generate(request: PromptRequest):
-    return StreamingResponse(generate_stream(request.prompt), media_type="text/event-stream")
+        logger.error(f"WebSocket error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
