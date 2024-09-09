@@ -1,44 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 
 function App() {
     const [input, setInput] = useState('');
     const [output, setOutput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleGenerate = async () => {
+    const handleGenerate = useCallback(async () => {
         setIsLoading(true);
         setOutput('');
 
-        const response = await fetch('http://localhost:8000/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ prompt: input }),
-        });
+        try {
+            const response = await fetch('http://localhost:8000/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ prompt: input }),
+            });
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
 
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n');
-            lines.forEach((line) => {
-                if (line.startsWith('data: ')) {
-                    const data = line.slice(6);
-                    if (data === '[DONE]') {
-                        setIsLoading(false);
-                    } else {
-                        setOutput((prevOutput) => prevOutput + data);
+            let buffer = '';
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        if (data === '[DONE]') {
+                            setIsLoading(false);
+                        } else {
+                            setOutput(prevOutput => prevOutput + data);
+                        }
                     }
                 }
-            });
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            setOutput('An error occurred while generating the response.');
+        } finally {
+            setIsLoading(false);
         }
-
-        setIsLoading(false);
-    };
+    }, [input]);
 
     return (
         <div className="container">

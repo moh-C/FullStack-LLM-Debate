@@ -31,7 +31,7 @@ class PromptRequest(BaseModel):
 async def generate_stream(prompt: str):
     try:
         response = await client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             stream=True
         )
