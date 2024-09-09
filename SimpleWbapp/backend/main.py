@@ -1,11 +1,9 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 import logging
-import asyncio
+import json
 from openai import AsyncOpenAI
 
 load_dotenv()
@@ -23,29 +21,48 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
 
-class PromptRequest(BaseModel):
-    prompt: str
+client = AsyncOpenAI(api_key=openai_api_key)
 
-async def generate_stream(prompt: str):
+async def handle_websocket(websocket: WebSocket, model: str):
+    await websocket.accept()
     try:
-        response = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            stream=True
-        )
-        async for chunk in response:
-            if chunk.choices[0].delta.content is not None:
-                yield f"data: {chunk.choices[0].delta.content}\n\n"
-        yield "data: [DONE]\n\n"
-    except Exception as e:
-        logger.error(f"Error in generate_stream: {str(e)}")
-        yield f"data: Error: {str(e)}\n\n"
+        while True:
+            data = await websocket.receive_text()
+            prompt = json.loads(data).get("prompt", "")
+            if not prompt:
+                await websocket.send_text("Error: No prompt provided")
+                continue
 
-@app.post("/generate")
-async def generate(request: PromptRequest):
-    return StreamingResponse(generate_stream(request.prompt), media_type="text/event-stream")
+            try:
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=True
+                )
+                async for chunk in response:
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        await websocket.send_text(content)
+                await websocket.send_text("[DONE]")
+            except Exception as e:
+                logger.error(f"Error in generating response: {str(e)}")
+                await websocket.send_text(f"Error: {str(e)}")
+    except WebSocketDisconnect:
+        logger.info("WebSocket connection closed")
+    except Exception as e:
+        logger.error(f"WebSocket error: {str(e)}")
+
+@app.websocket("/ws1")
+async def websocket_endpoint_1(websocket: WebSocket):
+    await handle_websocket(websocket, "gpt-4o")
+
+@app.websocket("/ws2")
+async def websocket_endpoint_2(websocket: WebSocket):
+    await handle_websocket(websocket, "gpt-4o-mini")
 
 if __name__ == "__main__":
     import uvicorn
