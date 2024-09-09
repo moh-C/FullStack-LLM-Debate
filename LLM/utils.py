@@ -3,6 +3,9 @@ from base import LLM
 import json
 from typing import Literal, Tuple, Dict
 from prompts.Persona import SET_PERSONA
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List
 
 
 CACHE_DIR = "debate_personas_cache"
@@ -165,3 +168,51 @@ def create_persona_llms(
     )
 
     return llm1, llm2
+
+@dataclass
+class Message:
+    role: str
+    content: str
+    timestamp: datetime
+    is_summary: bool = False
+    is_question: bool = False
+    turn: int = 0
+
+class ConversationHistory:
+    def __init__(self, summarizer: LLM, max_messages: int = 15, summary_interval: int = 5):
+        self.messages: List[Message] = []
+        self.max_messages = max_messages
+        self.summarizer = summarizer
+        self.summary_interval = summary_interval
+        self.turn_count = 0
+
+    def add_question(self, question: str):
+        self.turn_count += 1
+        self.messages.append(Message("Question", question, datetime.now(), is_question=True, turn=self.turn_count))
+
+    def add_message(self, role: str, content: str):
+        self.messages.append(Message(role, content, datetime.now(), turn=self.turn_count))
+        if len(self.messages) > self.max_messages:
+            self.messages = [msg for msg in self.messages if msg.is_summary] + self.messages[-self.max_messages:]
+        if self.turn_count % self.summary_interval == 0:
+            self._generate_summary()
+
+    def get_history(self) -> str:
+        formatted_history = ""
+        current_turn = 0
+        for msg in self.messages:
+            if msg.is_summary:
+                formatted_history += f"Summary: {msg.content}\n\n"
+            elif msg.is_question:
+                formatted_history += f"Question: {msg.content}\n"
+                formatted_history += f"Turn: {msg.turn}\n"
+                current_turn = msg.turn
+            elif msg.turn == current_turn:
+                formatted_history += f"{msg.role}: {msg.content}\n"
+        return formatted_history.strip()
+
+    def _generate_summary(self):
+        context = "\n".join([f"{msg.role}: {msg.content}" for msg in self.messages if not msg.is_summary])
+        summary_prompt = f"Summarize the following conversation concisely, capturing the main points:\n\n{context}\n\nSummary:"
+        summary = self.summarizer(summary_prompt)
+        self.messages = [msg for msg in self.messages if msg.is_summary] + [Message("Summary", summary, datetime.now(), is_summary=True)]
