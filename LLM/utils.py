@@ -1,33 +1,181 @@
-import re, os
-from base import LLM
+"""
+Utilities for generating and managing debate personas and conversations.
+
+This module provides functions and classes for creating debate personas,
+managing conversation history, and facilitating debates between AI agents.
+"""
+
+import re
+import os
 import json
-from typing import Literal, Tuple, Dict
+from datetime import datetime
+from typing import List, Tuple, Dict, Literal
+from dataclasses import dataclass
+
+from base import LLM
 from prompts.Persona import SET_PERSONA
 from prompts.clash import DEBATE_PERSONA
-from dataclasses import dataclass
-from datetime import datetime
-from typing import List
 
 CACHE_DIR = "debate_personas_cache"
 
-def extract_persona_data(xml_string):
+
+@dataclass
+class Message:
+    """
+    Represents a message in the conversation history.
+
+    Attributes:
+        role (str): The role of the message sender.
+        content (str): The content of the message.
+        timestamp (datetime): The time the message was created.
+        is_summary (bool): Whether the message is a summary.
+        is_question (bool): Whether the message is a question.
+        turn (int): The turn number of the message in the conversation.
+    """
+
+    role: str
+    content: str
+    timestamp: datetime
+    is_summary: bool = False
+    is_question: bool = False
+    turn: int = 0
+
+
+class ConversationHistory:
+    """
+    Manages the conversation history for a debate.
+
+    Attributes:
+        messages (List[Message]): List of messages in the conversation.
+        max_messages (int): Maximum number of messages to keep in history.
+        summarizer (LLM): LLM instance used for generating summaries.
+        summary_interval (int): Number of turns between summaries.
+        turn_count (int): Current turn count in the conversation.
+    """
+
+    def __init__(
+        self,
+        summarizer: LLM,
+        max_messages: int = 15,
+        summary_interval: int = 5
+    ):
+        """
+        Initialize the ConversationHistory.
+
+        Args:
+            summarizer (LLM): LLM instance used for generating summaries.
+            max_messages (int): Maximum number of messages to keep in history.
+            summary_interval (int): Number of turns between summaries.
+        """
+        self.messages: List[Message] = []
+        self.max_messages = max_messages
+        self.summarizer = summarizer
+        self.summary_interval = summary_interval
+        self.turn_count = 0
+
+    def add_question(self, question: str) -> None:
+        """
+        Add a question to the conversation history.
+
+        Args:
+            question (str): The question to add.
+        """
+        self.turn_count += 1
+        self.messages.append(
+            Message(
+                "Question",
+                question,
+                datetime.now(),
+                is_question=True,
+                turn=self.turn_count
+            )
+        )
+
+    def add_message(self, role: str, content: str) -> None:
+        """
+        Add a message to the conversation history.
+
+        Args:
+            role (str): The role of the message sender.
+            content (str): The content of the message.
+        """
+        self.messages.append(
+            Message(role, content, datetime.now(), turn=self.turn_count)
+        )
+        if len(self.messages) > self.max_messages:
+            self.messages = (
+                [msg for msg in self.messages if msg.is_summary]
+                + self.messages[-self.max_messages:]
+            )
+        if self.turn_count % self.summary_interval == 0:
+            self._generate_summary()
+
+    def get_history(self) -> str:
+        """
+        Get a formatted string of the conversation history.
+
+        Returns:
+            str: Formatted conversation history.
+        """
+        formatted_history = []
+        current_turn = 0
+        for msg in self.messages:
+            if msg.is_summary:
+                formatted_history.append(f"Summary: {msg.content}\n")
+            elif msg.is_question:
+                formatted_history.extend([
+                    f"Question: {msg.content}",
+                    f"Turn: {msg.turn}"
+                ])
+                current_turn = msg.turn
+            elif msg.turn == current_turn:
+                formatted_history.append(f"{msg.role}: {msg.content}")
+        return "\n".join(formatted_history)
+
+    def _generate_summary(self) -> None:
+        """Generate a summary of the conversation and add it to the history."""
+        context = "\n".join(
+            f"{msg.role}: {msg.content}"
+            for msg in self.messages
+            if not msg.is_summary
+        )
+        summary_prompt = (
+            f"Summarize the following conversation concisely, "
+            f"capturing the main points:\n\n{context}\n\nSummary:"
+        )
+        summary = self.summarizer(summary_prompt)
+        self.messages = (
+            [msg for msg in self.messages if msg.is_summary]
+            + [Message("Summary", summary, datetime.now(), is_summary=True)]
+        )
+
+
+def extract_persona_data(xml_string: str) -> List[Dict[str, str]]:
+    """
+    Extract persona data from an XML string.
+
+    Args:
+        xml_string (str): XML string containing persona data.
+
+    Returns:
+        List[Dict[str, str]]: List of dictionaries containing persona data.
+    """
     personas = []
-    
-    # Pattern to match each persona block
-    persona_pattern = r'<persona>\s*<name>(.*?)</name>\s*<userprompt>(.*?)</userprompt>\s*<systemprompt>(.*?)</systemprompt>\s*</persona>'
-    
-    # Find all matches
+    persona_pattern = (
+        r'<persona>\s*<name>(.*?)</name>\s*<userprompt>(.*?)</userprompt>'
+        r'\s*<systemprompt>(.*?)</systemprompt>\s*</persona>'
+    )
     matches = re.findall(persona_pattern, xml_string, re.DOTALL)
     
     for match in matches:
         name, user_prompt, system_prompt = match
-        
-        # Clean up the prompts
         user_prompt = re.sub(r'\s+', ' ', user_prompt).strip()
         system_prompt = re.sub(r'\s+', ' ', system_prompt).strip()
-        
-        # Remove the conversation_history tags from user_prompt
-        user_prompt = re.sub(r'<conversation_history>.*?</conversation_history>', '', user_prompt).strip()
+        user_prompt = re.sub(
+            r'<conversation_history>.*?</conversation_history>',
+            '',
+            user_prompt
+        ).strip()
         
         personas.append({
             'name': name.strip(),
@@ -36,6 +184,7 @@ def extract_persona_data(xml_string):
         })
     
     return personas
+
 
 def generate_debate_personas(
     debate_topic: str,
@@ -51,27 +200,20 @@ def generate_debate_personas(
         debate_topic (str): The topic of the debate.
         name1 (str): Name of the first debater.
         name2 (str): Name of the second debater.
-        answer_length (int): Length of the debate per turn,
+        answer_length (int): Length of the debate per turn.
         provider (Literal["openai", "claude"]): The LLM provider to use.
 
     Returns:
         Tuple[Dict[str, str], Dict[str, str]]: Two dictionaries containing
         the name, user prompt, and system prompt for each persona.
     """
-        # Create cache directory if it doesn't exist
     os.makedirs(CACHE_DIR, exist_ok=True)
-
-    # Create a cache key and file path
     cache_key = f"{debate_topic}_{name1}_{name2}_{provider}".replace(" ", "_")
     cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
-    print(f"Cache file is {cache_file}")
 
-    # Try to get cached result
     if os.path.exists(cache_file):
-        print(f"Opening cache file")
         with open(cache_file, 'r') as f:
             return tuple(json.load(f))
-        
 
     prompt = SET_PERSONA.format(
         debate_topic=debate_topic,
@@ -82,38 +224,20 @@ def generate_debate_personas(
 
     llm = LLM(provider=provider, stream=False)
     response = llm(user_prompt=prompt)
-    
-    print("Raw LLM response:")
-    print(response)
-    
     personas = extract_persona_data(response)
-
-    print(f"Extracted personas: {len(personas)}")
-    for i, persona in enumerate(personas):
-        print(f"Persona {i+1}:")
-        print(json.dumps(persona, indent=2))
 
     if len(personas) != 2:
         raise ValueError(f"Expected 2 personas, but got {len(personas)}")
 
-    if len(personas) < 2:
-        raise ValueError("Not enough personas generated")
+    result = tuple(
+        {
+            "name": persona["name"],
+            "user_prompt": persona["user_prompt"],
+            "system_prompt": persona["system_prompt"]
+        }
+        for persona in personas
+    )
 
-    persona1 = {
-        "name": personas[0]["name"],
-        "user_prompt": personas[0]["user_prompt"],
-        "system_prompt": personas[0]["system_prompt"]
-    }
-
-    persona2 = {
-        "name": personas[1]["name"],
-        "user_prompt": personas[1]["user_prompt"],
-        "system_prompt": personas[1]["system_prompt"]
-    }
-
-    result = (persona1, persona2)
-
-    # Cache the result
     with open(cache_file, 'w') as f:
         json.dump(result, f)
 
@@ -144,10 +268,10 @@ def create_persona_llms(
     Returns:
         Tuple[LLM, LLM]: Two LLM objects, one for each persona.
     """
-    # Generate personas
-    persona1, persona2 = generate_debate_personas(debate_topic, name1, name2, provider)
+    persona1, persona2 = generate_debate_personas(
+        debate_topic, name1, name2, provider
+    )
 
-    # Create LLM for Persona 1
     llm1 = LLM(
         provider=provider,
         name=persona1["name"],
@@ -157,7 +281,6 @@ def create_persona_llms(
         system_prompt=persona1["system_prompt"]
     )
 
-    # Create LLM for Persona 2
     llm2 = LLM(
         provider=provider,
         name=persona2["name"],
@@ -169,107 +292,49 @@ def create_persona_llms(
 
     return llm1, llm2
 
-@dataclass
-class Message:
-    role: str
-    content: str
-    timestamp: datetime
-    is_summary: bool = False
-    is_question: bool = False
-    turn: int = 0
 
-class ConversationHistory:
-    def __init__(self, summarizer: LLM, max_messages: int = 15, summary_interval: int = 5):
-        self.messages: List[Message] = []
-        self.max_messages = max_messages
-        self.summarizer = summarizer
-        self.summary_interval = summary_interval
-        self.turn_count = 0
+def start_clash(llm1: LLM, llm2: LLM, question: str, turn: int = 5) -> None:
+    """
+    Start a debate clash between two LLM personas.
 
-    def add_question(self, question: str):
-        self.turn_count += 1
-        self.messages.append(Message("Question", question, datetime.now(), is_question=True, turn=self.turn_count))
-
-    def add_message(self, role: str, content: str):
-        self.messages.append(Message(role, content, datetime.now(), turn=self.turn_count))
-        if len(self.messages) > self.max_messages:
-            self.messages = [msg for msg in self.messages if msg.is_summary] + self.messages[-self.max_messages:]
-        if self.turn_count % self.summary_interval == 0:
-            self._generate_summary()
-
-    def get_history(self) -> str:
-        formatted_history = ""
-        current_turn = 0
-        for msg in self.messages:
-            if msg.is_summary:
-                formatted_history += f"Summary: {msg.content}\n\n"
-            elif msg.is_question:
-                formatted_history += f"Question: {msg.content}\n"
-                formatted_history += f"Turn: {msg.turn}\n"
-                current_turn = msg.turn
-            elif msg.turn == current_turn:
-                formatted_history += f"{msg.role}: {msg.content}\n"
-        return formatted_history.strip()
-
-    def _generate_summary(self):
-        context = "\n".join([f"{msg.role}: {msg.content}" for msg in self.messages if not msg.is_summary])
-        summary_prompt = f"Summarize the following conversation concisely, capturing the main points:\n\n{context}\n\nSummary:"
-        summary = self.summarizer(summary_prompt)
-        self.messages = [msg for msg in self.messages if msg.is_summary] + [Message("Summary", summary, datetime.now(), is_summary=True)]
-
-
-def start_clash(llm1, llm2, question, turn=5):
+    Args:
+        llm1 (LLM): First LLM persona.
+        llm2 (LLM): Second LLM persona.
+        question (str): The debate question.
+        turn (int): Number of turns in the debate.
+    """
     summarizer = LLM(provider="claude", stream=False)
     history = ConversationHistory(summarizer, max_messages=15, summary_interval=5)
     
     debate_topic = "Buying bulky stuff from Costco"
-    name1 = "Pete Davidson"
-    name2 = "Shaq O'Neal"
-    provider = "openai"
-
-    llm1, llm2 = create_persona_llms(debate_topic, name1, name2, provider)
+    name1 = llm1.name
+    name2 = llm2.name
 
     history.add_question(question=question)
 
-    response_llm1 = llm1(user_prompt=question)
-    history.add_message(name1, response_llm1)
-
-    response_llm2 = llm2(user_prompt=question)
-    history.add_message(name2, response_llm2)
-    history.add_message("Info", f"-------------------Turn DONE------------------")
+    for persona_llm in (llm1, llm2):
+        response = persona_llm(user_prompt=question)
+        history.add_message(persona_llm.name, response)
+    
+    history.add_message("Info", "-------------------Turn DONE------------------")
 
     for _ in range(turn):
-        debate_prompt = DEBATE_PERSONA.format(
-            name=name1,
-            opponent=name2,
-            debate_topic=debate_topic,
-            question=question,
-            history=history.get_history(),
-            answer_length=150
-        )
-        response_llm1 = llm1(user_prompt=debate_prompt)
-        response_match = re.search(r'<response>(.*?)</response>', response_llm1, re.DOTALL)
-        generated_response1 = response_match.group(1).strip()
-        history.add_message(name1, generated_response1)
-
-        
-        debate_prompt = DEBATE_PERSONA.format(
-            name=name2,
-            opponent=name1,
-            debate_topic=debate_topic,
-            question=question,
-            history=history.get_history(),
-            answer_length=150
-        )
-        response_llm2 = llm2(user_prompt=debate_prompt)
-        response_match = re.search(r'<response>(.*?)</response>', response_llm2, re.DOTALL)
-        generated_response2 = response_match.group(1).strip()
-        history.add_message(name2, generated_response2)
+        for persona_llm, opponent_name in ((llm1, name2), (llm2, name1)):
+            debate_prompt = DEBATE_PERSONA.format(
+                name=persona_llm.name,
+                opponent=opponent_name,
+                debate_topic=debate_topic,
+                question=question,
+                history=history.get_history(),
+                answer_length=150
+            )
+            response = persona_llm(user_prompt=debate_prompt)
+            response_match = re.search(r'<response>(.*?)</response>', response, re.DOTALL)
+            generated_response = response_match.group(1).strip()
+            history.add_message(persona_llm.name, generated_response)
 
         history.add_message("Info", "-------------------Turn DONE------------------")
 
-
     print("Conversation History:")
     print(history.get_history())
-
     print("\nDone")
