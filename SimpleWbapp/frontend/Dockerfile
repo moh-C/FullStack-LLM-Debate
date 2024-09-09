@@ -1,13 +1,15 @@
-# Use an official Node runtime as a parent image
-FROM node:14-alpine
+FROM node:16-alpine
 
-# Set the working directory in the container
 WORKDIR /app
 
-# Copy package.json and package-lock.json
-COPY package*.json ./
+# Install create-react-app globally
+RUN npm install -g create-react-app
 
-# Install dependencies
-RUN npm install
+# Copy the setup script into the container
+COPY setup-react-app.sh /app/setup-react-app.sh
 
-# The command to run the app will be specified in docker-compose.yml
+# Make the script executable
+RUN chmod +x /app/setup-react-app.sh
+
+# Set the command to run the setup script
+CMD ["/app/setup-react-app.sh"]

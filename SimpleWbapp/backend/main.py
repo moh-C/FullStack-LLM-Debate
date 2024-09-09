@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 import logging
@@ -24,14 +25,14 @@ app.add_middleware(
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# Predefined prompt
-PREDEFINED_PROMPT = "Explain the concept of artificial intelligence in simple terms, providing 5 key points."
+class PromptRequest(BaseModel):
+    prompt: str
 
-async def generate_stream():
+async def generate_stream(prompt: str):
     try:
         response = await client.chat.completions.create(
             model="gpt-4",
-            messages=[{"role": "user", "content": PREDEFINED_PROMPT}],
+            messages=[{"role": "user", "content": prompt}],
             stream=True
         )
         async for chunk in response:
@@ -42,9 +43,9 @@ async def generate_stream():
         logger.error(f"Error in generate_stream: {str(e)}")
         yield f"data: Error: {str(e)}\n\n"
 
-@app.get("/stream")
-async def stream():
-    return StreamingResponse(generate_stream(), media_type="text/event-stream")
+@app.post("/generate")
+async def generate(request: PromptRequest):
+    return StreamingResponse(generate_stream(request.prompt), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn
