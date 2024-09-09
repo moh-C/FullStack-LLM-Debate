@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
@@ -21,7 +21,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai_api_key = os.getenv("OPENAI_API_KEY")
+if not openai_api_key:
+    raise ValueError("OPENAI_API_KEY environment variable is not set")
+
+client = AsyncOpenAI(api_key=openai_api_key)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -29,21 +33,27 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
-            prompt = json.loads(data)["prompt"]
-            
+            prompt = json.loads(data).get("prompt", "")
+            if not prompt:
+                await websocket.send_text("Error: No prompt provided")
+                continue
+
             try:
                 response = await client.chat.completions.create(
-                    model="gpt-4",
+                    model="gpt-4o-mini",
                     messages=[{"role": "user", "content": prompt}],
                     stream=True
                 )
                 async for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        await websocket.send_text(chunk.choices[0].delta.content)
+                    content = chunk.choices[0].delta.content
+                    if content:
+                        await websocket.send_text(content)
                 await websocket.send_text("[DONE]")
             except Exception as e:
-                logger.error(f"Error in generate_stream: {str(e)}")
+                logger.error(f"Error in generating response: {str(e)}")
                 await websocket.send_text(f"Error: {str(e)}")
+    except WebSocketDisconnect:
+        logger.info("WebSocket connection closed")
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
 
