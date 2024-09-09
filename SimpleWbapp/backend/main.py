@@ -27,8 +27,7 @@ if not openai_api_key:
 
 client = AsyncOpenAI(api_key=openai_api_key)
 
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def handle_websocket(websocket: WebSocket, model: str):
     await websocket.accept()
     try:
         while True:
@@ -40,7 +39,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             try:
                 response = await client.chat.completions.create(
-                    model="gpt-4o-mini",
+                    model=model,
                     messages=[{"role": "user", "content": prompt}],
                     stream=True
                 )
@@ -56,6 +55,14 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info("WebSocket connection closed")
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")
+
+@app.websocket("/ws1")
+async def websocket_endpoint_1(websocket: WebSocket):
+    await handle_websocket(websocket, "gpt-4o")
+
+@app.websocket("/ws2")
+async def websocket_endpoint_2(websocket: WebSocket):
+    await handle_websocket(websocket, "gpt-4o-mini")
 
 if __name__ == "__main__":
     import uvicorn
