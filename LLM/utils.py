@@ -147,6 +147,7 @@ def create_persona_llms(
     # Create LLM for Persona 1
     llm1 = LLM(
         provider=provider,
+        name=persona1["name"],
         stream=stream,
         max_tokens=max_tokens,
         temperature=temperature,
@@ -156,6 +157,7 @@ def create_persona_llms(
     # Create LLM for Persona 2
     llm2 = LLM(
         provider=provider,
+        name=persona2["name"],
         stream=stream,
         max_tokens=max_tokens,
         temperature=temperature,

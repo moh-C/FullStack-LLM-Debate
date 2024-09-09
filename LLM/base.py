@@ -10,17 +10,19 @@ class LLM:
     def __init__(
         self,
         provider: Literal["openai", "claude"],
+        name: str = None,
         stream: bool = False,
         model: Optional[str] = None,
         max_tokens: int = 1000,
         temperature: float = 0.7,
-        system_prompt: str = "You are a helpful AI assistant."
+        system_prompt: str = "You are a helpful AI assistant.",
     ):
         """
         Initialize the LLM object.
 
         Args:
             provider: The LLM provider to use ("openai" or "claude").
+            name: The LLM name, usually the name of the persona.
             stream: Whether to stream the response or not.
             model: The specific model to use (optional).
             max_tokens: The maximum number of tokens to generate.
@@ -29,6 +31,7 @@ class LLM:
         """
         load_dotenv()
         self.provider = provider
+        self.name = name
         self.stream = stream
         self.max_tokens = max_tokens
         self.temperature = temperature
