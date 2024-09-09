@@ -1,5 +1,10 @@
+"""
+This module provides a unified interface for interacting with different Language
+Model providers, specifically OpenAI and Anthropic's Claude.
+"""
+
 import os
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
 from anthropic import Anthropic
 from openai import OpenAI
@@ -7,10 +12,18 @@ from dotenv import load_dotenv
 
 
 class LLM:
+    """
+    A class to interact with different Language Model providers.
+
+    This class provides a unified interface for making calls to either OpenAI
+    or Anthropic's Claude API, handling both streaming and non-streaming
+    responses.
+    """
+
     def __init__(
         self,
         provider: Literal["openai", "claude"],
-        name: str = None,
+        name: Optional[str] = None,
         stream: bool = False,
         model: Optional[str] = None,
         max_tokens: int = 1000,
@@ -24,10 +37,13 @@ class LLM:
             provider: The LLM provider to use ("openai" or "claude").
             name: The LLM name, usually the name of the persona.
             stream: Whether to stream the response or not.
-            model: The specific model to use (optional).
+            model: The specific model to use.
             max_tokens: The maximum number of tokens to generate.
             temperature: Controls randomness in the output (0.0 to 1.0).
             system_prompt: The system prompt to use for all conversations.
+
+        Raises:
+            ValueError: If the provider is invalid or API key is missing.
         """
         load_dotenv()
         self.provider = provider
@@ -64,11 +80,18 @@ class LLM:
         """
         if self.provider == "openai":
             return self._call_openai(user_prompt)
-        else:
-            return self._call_claude(user_prompt)
+        return self._call_claude(user_prompt)
 
     def _call_openai(self, user_prompt: str) -> str:
-        """Call the OpenAI API."""
+        """
+        Call the OpenAI API.
+
+        Args:
+            user_prompt: The input prompt from the user.
+
+        Returns:
+            The generated response as a string.
+        """
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": user_prompt}
@@ -85,14 +108,21 @@ class LLM:
 
             if self.stream:
                 return self._handle_stream(response)
-            else:
-                return response.choices[0].message.content
+            return response.choices[0].message.content
         except Exception as e:
             print(f"Error calling OpenAI API: {str(e)}")
             return ""
 
     def _call_claude(self, user_prompt: str) -> str:
-        """Call the Anthropic Claude API."""
+        """
+        Call the Anthropic Claude API.
+
+        Args:
+            user_prompt: The input prompt from the user.
+
+        Returns:
+            The generated response as a string.
+        """
         try:
             response = self.client.messages.create(
                 model=self.model,
@@ -107,15 +137,21 @@ class LLM:
 
             if self.stream:
                 return self._handle_stream(response)
-            else:
-                return response.content[0].text
-
+            return response.content[0].text
         except Exception as e:
             print(f"Error calling Claude API: {str(e)}")
             return ""
 
     def _handle_stream(self, response) -> str:
-        """Handle streaming responses for both providers."""
+        """
+        Handle streaming responses for both providers.
+
+        Args:
+            response: The streaming response object from the API.
+
+        Returns:
+            The full response as a string.
+        """
         full_response = ""
         try:
             for chunk in response:
@@ -124,7 +160,8 @@ class LLM:
                     if chunk.choices and chunk.choices[0].delta.content is not None:
                         content = chunk.choices[0].delta.content
                 else:  # claude
-                    if chunk.type == 'content_block_delta' and chunk.delta.type == 'text_delta':
+                    if (chunk.type == 'content_block_delta' and
+                            chunk.delta.type == 'text_delta'):
                         content = chunk.delta.text
 
                 if content:
@@ -135,25 +172,53 @@ class LLM:
             print(f"\nError during streaming: {str(e)}")
         return full_response
 
-    def set_stream(self, stream: bool):
-        """Set the stream option."""
+    def set_stream(self, stream: bool) -> None:
+        """
+        Set the stream option.
+
+        Args:
+            stream: Boolean indicating whether to enable streaming.
+        """
         self.stream = stream
 
-    def set_model(self, model: str):
-        """Set the model to use."""
+    def set_model(self, model: str) -> None:
+        """
+        Set the model to use.
+
+        Args:
+            model: The name of the model to use.
+        """
         self.model = model
 
-    def set_max_tokens(self, max_tokens: int):
-        """Set the maximum number of tokens to generate."""
+    def set_max_tokens(self, max_tokens: int) -> None:
+        """
+        Set the maximum number of tokens to generate.
+
+        Args:
+            max_tokens: The maximum number of tokens.
+        """
         self.max_tokens = max_tokens
 
-    def set_temperature(self, temperature: float):
-        """Set the temperature for generation."""
+    def set_temperature(self, temperature: float) -> None:
+        """
+        Set the temperature for generation.
+
+        Args:
+            temperature: The temperature value between 0 and 1.
+
+        Raises:
+            ValueError: If the temperature is not between 0 and 1.
+        """
         if 0 <= temperature <= 1:
             self.temperature = temperature
         else:
             raise ValueError("Temperature must be between 0 and 1.")
 
-    def set_system_prompt(self, system_prompt: str):
-        """Set the system prompt."""
+    def set_system_prompt(self, system_prompt: str) -> None:
+        """
+        Set the system prompt.
+
+        Args:
+            system_prompt: The system prompt to use.
+        """
         self.system_prompt = system_prompt
