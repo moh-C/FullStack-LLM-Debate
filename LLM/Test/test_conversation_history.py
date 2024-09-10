@@ -1,37 +1,30 @@
-from dataclasses import dataclass
-from datetime import datetime
-from typing import List
-import sys, os, json
-
+import sys, os
 parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.insert(0, parent_dir)
-from base import LLM
-from utils import ConversationHistory, create_persona_llms
+from base import AsyncLLM
+from ConversationHandler import ConversationHistory
+import asyncio
 
-# Usage example
-if __name__ == "__main__":
-    from utils import create_persona_llms
-    
-    summarizer = LLM(provider="claude", stream=False)
-    history = ConversationHistory(summarizer, max_messages=15, summary_interval=5)
-    
-    debate_topic = "Buying bulky stuff from Costco"
-    name1 = "Pete Davidson"
-    name2 = "Shaq O'Neal"
-    provider = "openai"
+# Example usage (not part of the class):
+async def main():
+    summarizer = AsyncLLM("openai", name="summarizer")
+    history = ConversationHistory(summarizer)
 
-    llm1, llm2 = create_persona_llms(debate_topic, name1, name2, provider)
+    # Adding messages
+    await history.add_message("Hello, how are you?", "AI_1")
+    await history.add_message("I'm doing well, thank you for asking!", "AI_2")
+    await history.add_message("That's great to hear!", "AI_1")
+    await history.add_message("Indeed, it's always nice to start a conversation on a positive note.", "AI_2")
 
-    Q1 = "What's your thoughts on buying a lot of stuff from Costco?"
-    history.add_question(Q1)
+    # Getting last messages
+    current_msg, opponent_msg = history.get_last_messages("AI_1", "AI_2")
+    print(f"Last message from AI_1: {current_msg.content if current_msg else 'None'}")
+    print(f"Last message from AI_2: {opponent_msg.content if opponent_msg else 'None'}")
 
-    response_llm1 = llm1(user_prompt=Q1)
-    history.add_message(name1, response_llm1)
-
-    response_llm2 = llm2(user_prompt=Q1)
-    history.add_message(name2, response_llm2)
-
-    print("Conversation History:")
+    # Printing full history
+    print("\nFull conversation history:")
     print(history.get_history())
 
-    print("\nDone")
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
