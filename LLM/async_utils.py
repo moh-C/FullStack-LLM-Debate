@@ -68,7 +68,7 @@ async def generate_debate_personas(
 
 def extract_persona_data(xml_string: str) -> List[Dict[str, str]]:
     """
-    Extract persona data from an XML string, including CDATA content.
+    Extract persona data from an XML string.
 
     Args:
         xml_string (str): XML string containing persona data.
@@ -77,7 +77,7 @@ def extract_persona_data(xml_string: str) -> List[Dict[str, str]]:
         List[Dict[str, str]]: List of dictionaries containing persona data.
     """
     personas = []
-    persona_pattern = r'<persona>\s*<name>(.*?)</name>\s*<systemprompt>\s*<!\[CDATA\[(.*?)\]\]>\s*</systemprompt>\s*</persona>'
+    persona_pattern = r'<persona>\s*<name>(.*?)</name>\s*<systemprompt>(.*?)</systemprompt>\s*</persona>'
     matches = re.findall(persona_pattern, xml_string, re.DOTALL)
     
     for match in matches:
