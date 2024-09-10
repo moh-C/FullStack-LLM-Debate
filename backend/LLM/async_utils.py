@@ -1,8 +1,8 @@
 import os, re
 import json
 from typing import Tuple, Dict, Literal, List
-from base import AsyncLLM
-from prompts.Persona import SET_PERSONA
+from LLM.base import AsyncLLM
+from LLM.prompts.Persona import SET_PERSONA
 
 CACHE_DIR = "cache"
 

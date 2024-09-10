@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
-from base import AsyncLLM
+from LLM.base import AsyncLLM
 import tiktoken
 
 @dataclass
