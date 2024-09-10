@@ -27,8 +27,8 @@ class DebateRequest(BaseModel):
     topic: str
     name1: str
     name2: str
-    provider1: str = "gpt-4o-mini"
-    provider2: str = "gpt-4o-mini"
+    provider1: str = "gpt-4-0613"
+    provider2: str = "gpt-4-0613"
     questions: List[str]
     answer_length: int = 400
 
@@ -83,36 +83,6 @@ async def start_debate(request: DebateRequest):
         logger.error(f"Error in start_debate: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/one_turn_debate")
-async def one_turn_debate():
-    if not debate_state["current_llm"]:
-        raise HTTPException(status_code=400, detail="Debate not initialized. Call /start_debate first.")
-
-    response = await generate_debate_response()
-    return response
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            # Wait for a signal from the client to generate the next turn
-            await websocket.receive_text()
-            
-            response = await generate_debate_response()
-            await websocket.send_json(response)
-            await websocket.send_text("<END_WEBSOCKET_TOKEN>")
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected")
-
-@app.post("/one_turn_debate")
-async def one_turn_debate():
-    if not debate_state["current_llm"]:
-        raise HTTPException(status_code=400, detail="Debate not initialized. Call /start_debate first.")
-
-    response = await generate_debate_response()
-    return response
-
 async def generate_debate_response():
     current_llm = debate_state["current_llm"]
     opponent_llm = debate_state["opponent_llm"]
@@ -137,17 +107,41 @@ async def generate_debate_response():
         address_or_continue="Address the current question with flair" if turn_count == 0 else "Continue the debate based on recent exchanges"
     )
 
-    response = ""
+    full_response = ""
     async for chunk in current_llm(prompt):
-        response += chunk
+        full_response += chunk
+        yield {"name": current_llm.name, "chunk": chunk}
 
-    await history.add_message(response, current_llm.name)
+    await history.add_message(full_response, current_llm.name)
 
     debate_state["current_llm"], debate_state["opponent_llm"] = debate_state["opponent_llm"], debate_state["current_llm"]
     debate_state["turn_count"] += 1
 
-    return {"name": current_llm.name, "response": response}
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            # Wait for a signal from the client to generate the next turn
+            await websocket.receive_text()
+            
+            async for response_chunk in generate_debate_response():
+                await websocket.send_json(response_chunk)
+            await websocket.send_text("<END_WEBSOCKET_TOKEN>")
+    except WebSocketDisconnect:
+        logger.info("WebSocket disconnected")
 
+@app.post("/one_turn_debate")
+async def one_turn_debate():
+    if not debate_state["current_llm"]:
+        raise HTTPException(status_code=400, detail="Debate not initialized. Call /start_debate first.")
+
+    full_response = ""
+    current_name = debate_state["current_llm"].name
+    async for response_chunk in generate_debate_response():
+        full_response += response_chunk["chunk"]
+    
+    return {"name": current_name, "response": full_response}
 
 @app.get("/persona")
 async def get_persona():

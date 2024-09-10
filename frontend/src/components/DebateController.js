@@ -14,7 +14,17 @@ const DebateController = ({ debateStarted, setDebateStarted, setDebateResponses,
                     setIsLoading(false);
                 } else {
                     const data = JSON.parse(event.data);
-                    setDebateResponses(prev => [...prev, data]);
+                    setDebateResponses(prev => {
+                        const lastResponse = prev[prev.length - 1];
+                        if (lastResponse && lastResponse.name === data.name) {
+                            return [
+                                ...prev.slice(0, -1),
+                                { ...lastResponse, response: lastResponse.response + data.chunk }
+                            ];
+                        } else {
+                            return [...prev, { name: data.name, response: data.chunk }];
+                        }
+                    });
                 }
             };
             return () => {
