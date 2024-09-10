@@ -4,7 +4,7 @@ Model providers, specifically OpenAI and Anthropic's Claude, using async clients
 """
 
 import os
-from typing import Literal, Optional
+from typing import Literal, Optional, AsyncGenerator
 
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
@@ -68,7 +68,7 @@ class AsyncLLM:
         else:
             raise ValueError("Invalid provider. Choose 'openai' or 'claude'.")
 
-    async def __call__(self, user_prompt: str) -> str:
+    async def __call__(self, user_prompt: str) -> AsyncGenerator[str, None]:
         """
         Call the LLM with a user prompt asynchronously.
 
@@ -76,21 +76,24 @@ class AsyncLLM:
             user_prompt: The input prompt from the user.
 
         Returns:
-            The generated response as a string.
+            An AsyncGenerator yielding the response chunks.
         """
         if self.provider == "openai":
-            return await self._call_openai(user_prompt)
-        return await self._call_claude(user_prompt)
+            async for chunk in self._call_openai(user_prompt):
+                yield chunk
+        else:
+            async for chunk in self._call_claude(user_prompt):
+                yield chunk
 
-    async def _call_openai(self, user_prompt: str) -> str:
+    async def _call_openai(self, user_prompt: str) -> AsyncGenerator[str, None]:
         """
         Call the OpenAI API asynchronously.
 
         Args:
             user_prompt: The input prompt from the user.
 
-        Returns:
-            The generated response as a string.
+        Yields:
+            Chunks of the response as they become available.
         """
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -107,21 +110,23 @@ class AsyncLLM:
             )
 
             if self.stream:
-                return await self._handle_stream(response)
-            return response.choices[0].message.content
+                async for chunk in response:
+                    if chunk.choices and chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
+            else:
+                yield response.choices[0].message.content
         except Exception as e:
-            print(f"Error calling OpenAI API: {str(e)}")
-            return ""
+            yield f"Error calling OpenAI API: {str(e)}"
 
-    async def _call_claude(self, user_prompt: str) -> str:
+    async def _call_claude(self, user_prompt: str) -> AsyncGenerator[str, None]:
         """
         Call the Anthropic Claude API asynchronously.
 
         Args:
             user_prompt: The input prompt from the user.
 
-        Returns:
-            The generated response as a string.
+        Yields:
+            Chunks of the response as they become available.
         """
         try:
             response = await self.client.messages.create(
@@ -136,11 +141,13 @@ class AsyncLLM:
             )
 
             if self.stream:
-                return await self._handle_stream(response)
-            return response.content[0].text
+                async for chunk in response:
+                    if chunk.type == 'content_block_delta' and chunk.delta.type == 'text_delta':
+                        yield chunk.delta.text
+            else:
+                yield response.content[0].text
         except Exception as e:
-            print(f"Error calling Claude API: {str(e)}")
-            return ""
+            yield f"Error calling Claude API: {str(e)}"
 
     async def _handle_stream(self, response) -> str:
         """
@@ -159,18 +166,17 @@ class AsyncLLM:
                 if self.provider == "openai":
                     if chunk.choices and chunk.choices[0].delta.content is not None:
                         content = chunk.choices[0].delta.content
-                else:  # claude
+                else:
                     if (chunk.type == 'content_block_delta' and
                             chunk.delta.type == 'text_delta'):
                         content = chunk.delta.text
 
                 if content:
-                    print(content, end="", flush=True)
-                    full_response += content
+                    yield content
             print("\nStreaming completed.")
         except Exception as e:
             print(f"\nError during streaming: {str(e)}")
-        return full_response
+        # return full_response
 
     def set_stream(self, stream: bool) -> None:
         """
