@@ -1,9 +1,7 @@
-import traceback
 import logging
-from typing import List, Optional
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from typing import List
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from LLM.base import AsyncLLM
 from LLM.ConversationHandler import ConversationHistory
@@ -25,25 +23,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Debugging middleware
-@app.middleware("http")
-async def debug_middleware(request: Request, call_next):
-    logger.info(f"Received {request.method} request to {request.url}")
-    try:
-        response = await call_next(request)
-        logger.info(f"Responding with status code {response.status_code}")
-        return response
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        logger.error(traceback.format_exc())
-        return JSONResponse(status_code=500, content={"detail": str(e)})
-
 class DebateRequest(BaseModel):
     topic: str
     name1: str
     name2: str
-    provider1: str = "gpt-4-0613"
-    provider2: str = "gpt-4-0613"
+    provider1: str = "gpt-4o-mini"
+    provider2: str = "gpt-4o-mini"
     questions: List[str]
     answer_length: int = 400
 
@@ -57,17 +42,6 @@ debate_state = {
     "questions": [],
     "personas": None
 }
-
-@app.options("/{full_path:path}")
-async def options_route(request: Request):
-    return JSONResponse(
-        content="OK",
-        headers={
-            "Access-Control-Allow-Origin": "http://localhost:3000",
-            "Access-Control-Allow-Methods": "POST, GET, DELETE, PUT, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        },
-    )
 
 @app.get("/")
 async def root():
@@ -104,24 +78,42 @@ async def start_debate(request: DebateRequest):
         debate_state["turn_count"] = 0
         debate_state["questions"] = request.questions
 
-        return {"message": "Debate initialized. Connect to WebSocket to start."}
+        return {"message": "Debate initialized. Connect to WebSocket or use /one_turn_debate to progress."}
     except Exception as e:
         logger.error(f"Error in start_debate: {str(e)}")
-        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/one_turn_debate")
+async def one_turn_debate():
+    if not debate_state["current_llm"]:
+        raise HTTPException(status_code=400, detail="Debate not initialized. Call /start_debate first.")
+
+    response = await generate_debate_response()
+    return response
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     try:
         while True:
-            await run_single_turn(websocket)
-            await websocket.receive_text()  # Wait for a message from the client to continue
+            # Wait for a signal from the client to generate the next turn
+            await websocket.receive_text()
+            
+            response = await generate_debate_response()
+            await websocket.send_json(response)
+            await websocket.send_text("<END_WEBSOCKET_TOKEN>")
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
 
-async def run_single_turn(websocket: WebSocket):
+@app.post("/one_turn_debate")
+async def one_turn_debate():
+    if not debate_state["current_llm"]:
+        raise HTTPException(status_code=400, detail="Debate not initialized. Call /start_debate first.")
+
+    response = await generate_debate_response()
+    return response
+
+async def generate_debate_response():
     current_llm = debate_state["current_llm"]
     opponent_llm = debate_state["opponent_llm"]
     history = debate_state["history"]
@@ -145,20 +137,17 @@ async def run_single_turn(websocket: WebSocket):
         address_or_continue="Address the current question with flair" if turn_count == 0 else "Continue the debate based on recent exchanges"
     )
 
-    full_response = ""
-    async for chunk in generate_response(current_llm, prompt):
-        await websocket.send_text(chunk)
-        full_response += chunk
+    response = ""
+    async for chunk in current_llm(prompt):
+        response += chunk
 
-    await history.add_message(full_response, current_llm.name)
-    await websocket.send_text("<END_TOKEN_WEBSOCKET>")
+    await history.add_message(response, current_llm.name)
 
     debate_state["current_llm"], debate_state["opponent_llm"] = debate_state["opponent_llm"], debate_state["current_llm"]
     debate_state["turn_count"] += 1
 
-async def generate_response(llm: AsyncLLM, prompt: str):
-    async for chunk in llm(prompt):
-        yield chunk
+    return {"name": current_llm.name, "response": response}
+
 
 @app.get("/persona")
 async def get_persona():
