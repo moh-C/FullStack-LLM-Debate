@@ -18,13 +18,7 @@ export const testEndpoint = async (endpoint, method = 'get', data = null) => {
     }
 };
 
-export const startDebate = async () => {
-    const debateData = {
-        topic: "AI Ethics",
-        name1: "Proponent",
-        name2: "Opponent",
-        questions: ["What are the main ethical concerns in AI development?"]
-    };
+export const startDebate = async (debateData) => {
     const response = await testEndpoint('/start_debate', 'post', debateData);
     return response && response.message.includes("Debate initialized");
 };

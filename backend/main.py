@@ -27,10 +27,9 @@ class DebateRequest(BaseModel):
     topic: str
     name1: str
     name2: str
-    provider1: str = "gpt-4-0613"
-    provider2: str = "gpt-4-0613"
+    provider: str = "openai"
     questions: List[str]
-    answer_length: int = 400
+    answer_length: int = 150
 
 debate_state = {
     "llm1": None,
@@ -40,7 +39,8 @@ debate_state = {
     "opponent_llm": None,
     "turn_count": 0,
     "questions": [],
-    "personas": None
+    "personas": None,
+    "answer_length": 100
 }
 
 @app.get("/")
@@ -59,37 +59,39 @@ async def start_debate(request: DebateRequest):
             request.topic,
             request.name1,
             request.name2,
-            answer_length=400,
-            provider="openai"
+            answer_length=request.answer_length,
+            provider=request.provider
         )
         
         debate_state["llm1"], debate_state["llm2"] = await create_persona_llms(
             request.topic,
             request.name1,
             request.name2,
-            provider="openai",
+            provider=request.provider,
             stream=True,
-            max_tokens=400
+            max_tokens=request.answer_length * 3
         )
         
-        summarizer = AsyncLLM("openai", name="summarizer")
+        summarizer = AsyncLLM(request.provider, name="summarizer")
         debate_state["history"] = ConversationHistory(summarizer)
         debate_state["current_llm"], debate_state["opponent_llm"] = debate_state["llm1"], debate_state["llm2"]
         debate_state["turn_count"] = 0
         debate_state["questions"] = request.questions
+        debate_state["answer_length"] = request.answer_length
 
         return {"message": "Debate initialized. Connect to WebSocket or use /one_turn_debate to progress."}
     except Exception as e:
         logger.error(f"Error in start_debate: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
+    
+    
 async def generate_debate_response():
     current_llm = debate_state["current_llm"]
     opponent_llm = debate_state["opponent_llm"]
     history = debate_state["history"]
     turn_count = debate_state["turn_count"]
     question = debate_state["questions"][0] if turn_count == 0 else ""
-    max_words = 150
+    max_words = debate_state["answer_length"]
 
     last_messages = history.get_last_messages(current_llm.name, opponent_llm.name)
     opponent_last_message = last_messages[1][1].content if last_messages[1][1] else ""

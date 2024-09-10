@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { startDebate, oneTurnDebate, getPersonas } from '../utils/api';
+import DebateForm from './DebateForm';
 
 const DebateController = ({ debateStarted, setDebateStarted, setDebateResponses, setPersonas }) => {
     const [isLoading, setIsLoading] = useState(false);
@@ -35,9 +36,17 @@ const DebateController = ({ debateStarted, setDebateStarted, setDebateResponses,
         }
     }, [debateStarted, useWebSocket, setDebateResponses]);
 
-    const handleStartDebate = async () => {
+    const handleStartDebate = async (formData) => {
         setIsLoading(true);
-        const success = await startDebate();
+        const debateData = {
+            topic: formData.topic,
+            name1: formData.name1,
+            name2: formData.name2,
+            questions: [formData.question],
+            provider: formData.provider,
+            answer_length: formData.answer_length
+        };
+        const success = await startDebate(debateData);
         if (success) {
             setDebateStarted(true);
         }
@@ -68,12 +77,17 @@ const DebateController = ({ debateStarted, setDebateStarted, setDebateResponses,
 
     return (
         <div style={{ marginBottom: '20px' }}>
-            <button onClick={handleStartDebate} disabled={isLoading || debateStarted}>Start Debate</button>
-            {debateStarted && (
+            {!debateStarted ? (
+                <DebateForm onSubmit={handleStartDebate} />
+            ) : (
                 <>
-                    <button onClick={handleOneTurnDebate} disabled={isLoading} style={{ marginLeft: '10px' }}>One Turn Debate</button>
-                    <button onClick={handleGetPersonas} disabled={isLoading} style={{ marginLeft: '10px' }}>Get Personas</button>
-                    <label style={{ marginLeft: '10px' }}>
+                    <button onClick={handleOneTurnDebate} disabled={isLoading} style={{ marginRight: '10px' }}>
+                        One Turn Debate
+                    </button>
+                    <button onClick={handleGetPersonas} disabled={isLoading} style={{ marginRight: '10px' }}>
+                        Get Personas
+                    </button>
+                    <label>
                         <input
                             type="checkbox"
                             checked={useWebSocket}
