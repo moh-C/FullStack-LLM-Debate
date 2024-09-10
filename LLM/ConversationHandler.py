@@ -29,10 +29,10 @@ class ConversationHistory:
         if self._get_token_count() > self.max_token_length:
             await self._generate_summary()
 
-    def get_last_messages(self, current_llm: str, opponent_llm: str) -> Tuple[Optional[Message], Optional[Message]]:
+    def get_last_messages(self, current_llm: str, opponent_llm: str) -> List[Tuple[str, Optional[Message]]]:
         current_llm_msg = next((msg for msg in reversed(self.messages) if msg.sender == current_llm), None)
         opponent_llm_msg = next((msg for msg in reversed(self.messages) if msg.sender == opponent_llm), None)
-        return current_llm_msg, opponent_llm_msg
+        return [(current_llm, current_llm_msg), (opponent_llm, opponent_llm_msg)]
 
     def get_history(self) -> str:
         return "\n".join(f"{msg.sender}: {msg.content}" for msg in self.messages)
