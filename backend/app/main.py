@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes import debate_router, websocket_router
 from app.database import engine, Base
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
 app = FastAPI()
 
 # Create database tables

@@ -14,6 +14,8 @@ class Debate(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     questions = Column(Text)  # Store as JSON string
     answer_length = Column(Integer)
+    persona1 = Column(Text)  # Store as JSON string
+    persona2 = Column(Text)  # Store as JSON string
     turns = relationship("DebateTurn", back_populates="debate")
 
 class DebateTurn(Base):
@@ -23,6 +25,7 @@ class DebateTurn(Base):
     debate_id = Column(Integer, ForeignKey("debates.id"))
     speaker = Column(String)
     content = Column(Text)
+    prompt = Column(Text)  # New field to store the prompt
     turn_number = Column(Integer)
     created_at = Column(DateTime, default=datetime.utcnow)
 

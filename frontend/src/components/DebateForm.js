@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 
 const DebateForm = ({ onSubmit }) => {
     const [formData, setFormData] = useState({
-        topic: '',
-        name1: '',
-        name2: '',
-        question: '',
+        topic: 'Costco Muffins',
+        name1: 'Kevin Hart',
+        name2: 'Justin Bieber',
+        question: 'Why are they so big?',
         provider: 'openai',
-        answer_length: 400
+        answer_length: 200
     });
 
     const handleChange = (e) => {

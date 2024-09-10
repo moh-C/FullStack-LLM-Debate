@@ -35,7 +35,29 @@ class ConversationHistory:
         return [(current_llm, current_llm_msg), (opponent_llm, opponent_llm_msg)]
 
     def get_history(self) -> str:
-        return "\n".join(f"{msg.sender}: {msg.content}" for msg in self.messages)
+        if len(self.messages) < 3:
+            return ""  # Return empty string if there are fewer than 3 messages
+
+        # Get the last two unique senders (current and opponent LLMs)
+        last_senders = list(dict.fromkeys(msg.sender for msg in reversed(self.messages)))[:2]
+
+        # Filter out the last message from each of the last two senders
+        filtered_messages = []
+        last_message_indices = {sender: -1 for sender in last_senders}
+
+        for i, msg in enumerate(reversed(self.messages)):
+            if msg.sender in last_senders:
+                if last_message_indices[msg.sender] == -1:
+                    last_message_indices[msg.sender] = i
+                elif i > last_message_indices[msg.sender]:
+                    filtered_messages.append(msg)
+            else:
+                filtered_messages.append(msg)
+
+        # Reverse the list again to get the correct order
+        filtered_messages.reverse()
+
+        return "\n".join(f"{msg.sender}: {msg.content}" for msg in filtered_messages)
 
     def _get_token_count(self) -> int:
         return sum(len(self.encoding.encode(msg.content)) for msg in self.messages)
