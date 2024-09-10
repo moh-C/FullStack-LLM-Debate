@@ -3,27 +3,28 @@ from typing import Tuple, List
 from base import AsyncLLM
 from ConversationHandler import ConversationHistory
 from async_utils import create_persona_llms
-
+from prompts.clash import DEBATE_PROMPT_TEMPLATE
 
 async def generate_response(llm: AsyncLLM, prompt: str):
     async for chunk in llm(prompt):
         yield chunk
 
-async def run_single_turn(current_llm: AsyncLLM, opponent_llm: AsyncLLM, history: ConversationHistory, question: str, turn_count: int):
+async def run_single_turn(current_llm: AsyncLLM, opponent_llm: AsyncLLM, history: ConversationHistory, question: str, turn_count: int, max_words: int = 150):
     last_messages = history.get_last_messages(current_llm.name, opponent_llm.name)
     opponent_last_message = last_messages[1][1].content if last_messages[1][1] else ""
     current_llm_last_msg = last_messages[0][1].content if last_messages[0][1] else ""
 
-    prompt = f"""
-    You are {current_llm.name} and your opponent is {opponent_llm.name}.
-    {"Question: " + question if turn_count == 0 else "Continue the debate based on the previous messages."}
-    History: {history.get_history()}
-    Opponent's last message: {opponent_last_message}
-    Your last message: {current_llm_last_msg}
-    
-    Please provide your response {"to the question" if turn_count == 0 else "continuing the debate"}, and don't forget to roast your opponent!
-    CRITICAL: Your response should be a maximum of 150 words.
-    """
+    prompt = DEBATE_PROMPT_TEMPLATE.format(
+        initial_question=question,
+        current_llm_name=current_llm.name,
+        opponent_llm_name=opponent_llm.name,
+        question_or_continuation=f"Question: {question}" if turn_count == 0 else "Continue the debate based on the previous messages.",
+        history=history.get_history(),
+        opponent_last_message=opponent_last_message,
+        current_llm_last_msg=current_llm_last_msg,
+        max_words=max_words,
+        address_or_continue="Address the current question with flair" if turn_count == 0 else "Continue the debate based on recent exchanges"
+    )
 
     print(f"\n{'='*50}")
     print(f"Turn {turn_count + 1}: {current_llm.name}'s turn")
@@ -42,7 +43,7 @@ async def run_single_turn(current_llm: AsyncLLM, opponent_llm: AsyncLLM, history
     print("\nWaiting for next turn...")
     await asyncio.sleep(2)  # Simulate 2-second delay between turns
 
-async def run_debate(topic: str, name1: str, name2: str, questions: List[str], num_turns: int = 6):
+async def run_debate(topic: str, name1: str, name2: str, questions: List[str], num_turns: int = 4):
     print(f"{'*'*50}")
     print(f"Starting debate on: {topic}")
     print(f"Debaters: {name1} vs {name2}")
