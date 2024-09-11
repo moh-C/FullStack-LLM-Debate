@@ -1,32 +1,32 @@
-import React, { useState } from "react";
-import ApiTestDashboard from "./components/ApiTestDashboard";
-import DebateController from "./components/DebateController";
-import DebateDisplay from "./components/DebateDisplay";
-import PersonaDisplay from "./components/PersonaDisplay";
+import React, { useState } from 'react';
+import DebateHistory from './components/DebateHistory';
+import ChatArea from './components/ChatArea';
+import PersonaForm from './components/PersonaForm';
+import PersonaOverlay from './components/PersonaOverlay';
+import { DebateProvider } from './contexts/DebateContext';
 
 const App = () => {
-  const [debateStarted, setDebateStarted] = useState(false);
-  const [debateResponses, setDebateResponses] = useState([]);
-  const [personas, setPersonas] = useState(null);
+  const [showPersonaOverlay, setShowPersonaOverlay] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100 p-8">
-      <h1 className="text-4xl font-bold mb-8 text-blue-400">
-        Debate API Dashboard
-      </h1>
-
-      <div className="space-y-8">
-        <ApiTestDashboard />
-        <DebateController
-          debateStarted={debateStarted}
-          setDebateStarted={setDebateStarted}
-          setDebateResponses={setDebateResponses}
-          setPersonas={setPersonas}
-        />
-        {debateStarted && <DebateDisplay debateResponses={debateResponses} />}
-        {personas && <PersonaDisplay personas={personas} />}
+    <DebateProvider>
+      <div className="flex h-screen bg-gray-100">
+        <DebateHistory />
+        <ChatArea />
+        <div className="w-1/6 bg-white shadow-md overflow-y-auto">
+          <PersonaForm />
+          <button
+            onClick={() => setShowPersonaOverlay(true)}
+            className="w-full bg-blue-500 text-white p-2 mt-4"
+          >
+            View Persona History
+          </button>
+        </div>
       </div>
-    </div>
+      {showPersonaOverlay && (
+        <PersonaOverlay onClose={() => setShowPersonaOverlay(false)} />
+      )}
+    </DebateProvider>
   );
 };
 
