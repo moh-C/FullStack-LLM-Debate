@@ -2,6 +2,16 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:8000';
 
+export const getPersonas = async () => {
+    try {
+        const response = await axios.get(`${API_URL}/personas`);
+        return response.data.personas;
+    } catch (error) {
+        console.error('Error fetching personas:', error);
+        return [];
+    }
+};
+
 const testEndpoint = async (endpoint, method = 'get', data = null) => {
     try {
         let response;
