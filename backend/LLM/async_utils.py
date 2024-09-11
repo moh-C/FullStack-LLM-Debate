@@ -3,38 +3,38 @@ import json
 from typing import Tuple, Dict, Literal, List
 from LLM.base import AsyncLLM
 from LLM.prompts.Persona import SET_PERSONA
+from app.models import Persona
+from sqlalchemy.orm import Session
 
-CACHE_DIR = "cache"
 
 async def generate_debate_personas(
     debate_topic: str,
     name1: str,
     name2: str,
+    persona_db: Session,
     answer_length: int = 400,
-    provider: Literal["openai", "claude"] = "openai"
+    provider: Literal["openai", "claude"] = "openai",
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """
-    Generate debate personas based on the given topic and names asynchronously.
+    # Ensure name1 and name2 are always in the same order
+    sorted_names = sorted([name1, name2])
+    name1, name2 = sorted_names
 
-    Args:
-        debate_topic (str): The topic of the debate.
-        name1 (str): Name of the first debater.
-        name2 (str): Name of the second debater.
-        answer_length (int): Length of the debate per turn.
-        provider (Literal["openai", "claude"]): The LLM provider to use.
+    # Check if personas exist in the database
+    existing_persona = persona_db.query(Persona).filter(
+        Persona.topic == debate_topic,
+        Persona.name1 == name1,
+        Persona.name2 == name2,
+        Persona.answer_length == answer_length,
+        Persona.provider == provider
+    ).first()
 
-    Returns:
-        Tuple[Dict[str, str], Dict[str, str]]: Two dictionaries containing
-        the name, user prompt, and system prompt for each persona.
-    """
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    cache_key = f"{debate_topic}_{name1}_{name2}_{provider}".replace(" ", "_")
-    cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
+    if existing_persona:
+        return (
+            {"name": existing_persona.persona1_name, "system_prompt": existing_persona.persona1_system_prompt},
+            {"name": existing_persona.persona2_name, "system_prompt": existing_persona.persona2_system_prompt}
+        )
 
-    if os.path.exists(cache_file):
-        with open(cache_file, 'r') as f:
-            return tuple(json.load(f))
-
+    # Generate new personas
     prompt = SET_PERSONA.format(
         debate_topic=debate_topic,
         name1=name1,
@@ -46,25 +46,34 @@ async def generate_debate_personas(
     response = ""
     async for chunk in llm(user_prompt=prompt):
         response += chunk
-    print(f"response is: {response}")
+    
     personas = extract_persona_data(response)
 
     if len(personas) != 2:
         raise ValueError(f"Expected 2 personas, but got {len(personas)}")
 
-    result = tuple(
+    # Save new personas to the database
+    new_persona = Persona(
+        topic=debate_topic,
+        name1=name1,
+        name2=name2,
+        persona1_name=personas[0]["name"],
+        persona2_name=personas[1]["name"],
+        persona1_system_prompt=personas[0]["system_prompt"],
+        persona2_system_prompt=personas[1]["system_prompt"],
+        answer_length=answer_length,
+        provider=provider
+    )
+    persona_db.add(new_persona)
+    persona_db.commit()
+
+    return tuple(
         {
             "name": persona["name"],
             "system_prompt": persona["system_prompt"]
         }
         for persona in personas
     )
-
-    with open(cache_file, 'w') as f:
-        json.dump(result, f)
-
-    return result
-
 
 def extract_persona_data(xml_string: str) -> List[Dict[str, str]]:
     """
@@ -100,7 +109,8 @@ async def create_persona_llms(
     provider: Literal["openai", "claude"] = "openai",
     stream: bool = True,
     max_tokens: int = 400,
-    temperature: float = 0.7
+    temperature: float = 0.7,
+    persona_db: Session = None
 ) -> Tuple[AsyncLLM, AsyncLLM]:
     """
     Create LLM objects for two debate personas asynchronously.
@@ -117,7 +127,13 @@ async def create_persona_llms(
     Returns:
         Tuple[LLM, LLM]: Two LLM objects, one for each persona.
     """
-    personas = await generate_debate_personas(debate_topic, name1, name2, provider=provider)
+    personas = await generate_debate_personas(
+        debate_topic,
+        name1,
+        name2,
+        provider=provider,
+        persona_db=persona_db
+        )
 
     llm1 = AsyncLLM(
         provider=provider,
