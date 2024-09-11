@@ -58,3 +58,19 @@ class DebateHistoryItem(BaseModel):
 
 class DebateHistoryResponse(BaseModel):
     debates: List[DebateHistoryItem]
+
+class PersonaListItem(BaseModel):
+    id: int
+    topic: str
+    name1: str
+    name2: str
+    persona1_name: str
+    persona2_name: str
+    persona1_system_prompt: str
+    persona2_system_prompt: str
+    answer_length: int
+    provider: str
+    created_at: datetime
+
+class PersonaListResponse(BaseModel):
+    personas: List[PersonaListItem]
